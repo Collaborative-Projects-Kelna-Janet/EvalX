@@ -1,0 +1,1 @@
+web: gunicorn evalx_core.wsgi:application
