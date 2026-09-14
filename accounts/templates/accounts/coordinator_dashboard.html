@@ -66,7 +66,7 @@
 
     <div class="sidebar-section-title">Document Deadlines</div>
     <div class="deadline-form-sidebar">
-        <form method="POST">
+        <form method="POST" action="{% url 'coordinator_dashboard' %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="set_deadline">
             <label>Category</label>
@@ -102,7 +102,7 @@
 
     <div class="sidebar-section-title">Remove Deadlines</div>
     <div class="deadline-form-sidebar">
-        <form method="POST" onsubmit="return confirm('Warning: Deleting a deadline will also remove any student submissions for that category. Proceed?');">
+        <form method="POST" action="{% url 'coordinator_dashboard' %}" onsubmit="return confirm('Warning: Deleting a deadline will also remove any student submissions for that category. Proceed?');">
             {% csrf_token %}
             <input type="hidden" name="action" value="delete_deadline">
             <label>Select Category</label>
