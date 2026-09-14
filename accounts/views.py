@@ -18,6 +18,7 @@ from django.db import transaction
 from django.template.loader import render_to_string
 from xhtml2pdf import pisa
 from django.db.models import Q
+from django.core.mail import send_mail
 import json
 import io
 from django.views.decorators.csrf import csrf_exempt
@@ -295,34 +296,64 @@ def coordinator_dashboard(request):
 
         elif action == 'set_deadline':
             slot_type = request.POST.get('slot_type')
-            notification_msg = ""
             
             if slot_type in ['REV1', 'REV2', 'PPT1', 'PPT2']:
                 date_val = request.POST.get('review_date') or request.POST.get('specific_review_date')
-                DocumentSlot.objects.update_or_create(
+                slot, _ = DocumentSlot.objects.update_or_create(
                     slot_type=slot_type,
                     defaults={'title': f"{slot_type} Presentation", 'review_date': date_val, 'is_active': True, 'deadline': None}
                 )
-                notification_msg = f"{slot_type} date set."
             else:
                 date_val = request.POST.get('deadline_date')
                 titles = {'PROPOSAL': 'Project Proposal', 'ABSTRACT': 'Abstract', 'SRS': 'SRS Document','FINAL_PPT': 'Final PPT', 'REPORT': 'Final Report'}
                 title = titles.get(slot_type, "Document Submission")
-                DocumentSlot.objects.update_or_create(
+                slot, _ = DocumentSlot.objects.update_or_create(
                     slot_type=slot_type,
                     defaults={'title': title, 'deadline': date_val, 'is_active': True, 'review_date': None}
                 )
-                notification_msg = "Deadline updated."
 
-            messages.success(request, f"Schedule for {slot_type} has been successfully updated!")
+            # Safely send notification email without risking worker timeouts
+            try:
+                # Gather active user email list
+                recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
+                if recipient_emails:
+                    send_mail(
+                        subject=f"EVALX Schedule Updated: {slot.title}",
+                        message=f"The schedule/deadline for {slot.title} has been updated.",
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=recipient_emails,
+                        fail_silently=False,
+                    )
+                messages.success(request, f"Schedule for {slot_type} updated and notifications dispatched!")
+            except Exception as e:
+                print(f"Set Deadline Email Timeout/Error: {e}")
+                messages.warning(request, f"Schedule for {slot_type} saved, but email notification timed out.")
+
             return redirect('coordinator_dashboard')
         
         elif action == 'delete_deadline':
             slot_type = request.POST.get('slot_type')
             slot = DocumentSlot.objects.filter(slot_type=slot_type).first()
             if slot:
+                slot_title = slot.title
                 slot.delete()
-                messages.success(request, "Deadline removed.")
+                
+                # Safely send deletion email without risking worker timeouts
+                try:
+                    recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
+                    if recipient_emails:
+                        send_mail(
+                            subject=f"EVALX Schedule Removed: {slot_title}",
+                            message=f"The schedule for {slot_title} has been removed by the Coordinator.",
+                            from_email=settings.DEFAULT_FROM_EMAIL,
+                            recipient_list=recipient_emails,
+                            fail_silently=False,
+                        )
+                    messages.success(request, "Deadline removed and notification dispatched.")
+                except Exception as e:
+                    print(f"Delete Deadline Email Timeout/Error: {e}")
+                    messages.warning(request, "Deadline removed from database, but notification email failed to send.")
+
             return redirect('coordinator_dashboard')
 
     context = {
