@@ -341,6 +341,7 @@ def coordinator_dashboard(request):
                     slot_type=slot_type,
                     defaults={'title': f"{slot_type} Presentation", 'review_date': date_val, 'is_active': True, 'deadline': None}
                 )
+                date_label = "Review Date"
             else:
                 date_val = request.POST.get('deadline_date')
                 titles = {'PROPOSAL': 'Project Proposal', 'ABSTRACT': 'Abstract', 'SRS': 'SRS Document','FINAL_PPT': 'Final PPT', 'REPORT': 'Final Report'}
@@ -349,11 +350,24 @@ def coordinator_dashboard(request):
                     slot_type=slot_type,
                     defaults={'title': title, 'deadline': date_val, 'is_active': True, 'review_date': None}
                 )
+                date_label = "Deadline"
+
+            formatted_date = date_val
+            if date_val:
+                try:
+                    dt = datetime.strptime(str(date_val), '%Y-%m-%d')
+                    formatted_date = dt.strftime('%d %B, %Y')
+                except ValueError:
+                    formatted_date = date_val
 
             recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
             if recipient_emails:
-                subject = f"EVALX Schedule Updated: {slot.title}"
-                html_content = f"<p>The schedule/deadline for <strong>{slot.title}</strong> has been updated.</p>"
+                subject = f"Schedule Updated: {slot.title}"
+                html_content = f"""
+                    <p>Important Update for {slot.title}:</p>
+                    <p>{date_label} has been set for: {formatted_date}</p>
+                    <p>Please check your dashboard for details.</p>
+                """
                 
                 email_sent = send_brevo_email(subject, html_content, recipient_emails)
                 if email_sent:
@@ -387,7 +401,6 @@ def coordinator_dashboard(request):
 
             return redirect('coordinator_dashboard')
 
-    # --- REQUIRED FOR GET REQUESTS ---
     context = {
         'teams': teams,
         'slots_dict': slots_dict,
