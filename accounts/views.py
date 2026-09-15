@@ -3,6 +3,8 @@ import random, string
 from datetime import datetime
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.contrib.auth import get_user_model
+from collections import defaultdict
 from django.http import JsonResponse
 import openpyxl
 import sib_api_v3_sdk
@@ -25,6 +27,9 @@ import json
 import io
 from django.views.decorators.csrf import csrf_exempt
 
+User = get_user_model()  # Get the User model dynamically
+
+
 def send_brevo_email(subject, html_content, recipient_emails):
     """Dispatches emails via Brevo HTTPS API instead of SMTP sockets."""
     api_key = os.getenv('BREVO_API_KEY')
@@ -39,6 +44,9 @@ def send_brevo_email(subject, html_content, recipient_emails):
     sender_email = os.getenv('DEFAULT_FROM_EMAIL', 'cseprojectsaisat@gmail.com')
     sender = {"name": "EvalX System", "email": sender_email}
     to = [{"email": email} for email in recipient_emails if email]
+
+    if not to:
+        return False
 
     send_smail = sib_api_v3_sdk.SendSmtpEmail(
         to=to,
@@ -281,7 +289,6 @@ def coordinator_dashboard(request):
     slots = DocumentSlot.objects.all()
     slots_dict = {slot.slot_type: slot for slot in slots}
 
-    from collections import defaultdict
     submissions_raw = TeamSubmission.objects.all().select_related('slot')
     team_submissions_map = defaultdict(dict)
     for sub in submissions_raw:
@@ -343,7 +350,6 @@ def coordinator_dashboard(request):
                     defaults={'title': title, 'deadline': date_val, 'is_active': True, 'review_date': None}
                 )
 
-            # --- UPDATED TO USE BREVO API ---
             recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
             if recipient_emails:
                 subject = f"EVALX Schedule Updated: {slot.title}"
@@ -366,7 +372,6 @@ def coordinator_dashboard(request):
                 slot_title = slot.title
                 slot.delete()
                 
-                # --- UPDATED TO USE BREVO API ---
                 recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
                 if recipient_emails:
                     subject = f"EVALX Schedule Removed: {slot_title}"
@@ -381,6 +386,14 @@ def coordinator_dashboard(request):
                     messages.warning(request, "Deadline removed from database.")
 
             return redirect('coordinator_dashboard')
+
+    # --- REQUIRED FOR GET REQUESTS ---
+    context = {
+        'teams': teams,
+        'slots_dict': slots_dict,
+        'team_submissions_map': dict(team_submissions_map),
+    }
+    return render(request, 'coordinator_dashboard.html', context)
 
 @login_required
 def evaluate_r1_batch_coordinator(request):
