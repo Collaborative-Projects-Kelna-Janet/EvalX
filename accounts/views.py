@@ -25,6 +25,35 @@ import json
 import io
 from django.views.decorators.csrf import csrf_exempt
 
+def send_brevo_email(subject, html_content, recipient_emails):
+    """Dispatches emails via Brevo HTTPS API instead of SMTP sockets."""
+    api_key = os.getenv('BREVO_API_KEY')
+    if not api_key:
+        print("BREVO_API_KEY environment variable missing.")
+        return False
+
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key['api-key'] = api_key
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+
+    sender_email = os.getenv('DEFAULT_FROM_EMAIL', 'cseprojectsaisat@gmail.com')
+    sender = {"name": "EvalX System", "email": sender_email}
+    to = [{"email": email} for email in recipient_emails if email]
+
+    send_smail = sib_api_v3_sdk.SendSmtpEmail(
+        to=to,
+        sender=sender,
+        subject=subject,
+        html_content=html_content
+    )
+
+    try:
+        api_instance.send_transac_email(send_smail)
+        return True
+    except ApiException as e:
+        print(f"Brevo API Error: {e}")
+        return False
+
 def check_reg_number(request):
     reg = request.GET.get('reg', None)
     data = {
