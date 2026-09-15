@@ -393,8 +393,7 @@ def coordinator_dashboard(request):
         'slots_dict': slots_dict,
         'team_submissions_map': dict(team_submissions_map),
     }
-    return render(request, 'coordinator_dashboard.html', context)
-
+    return render(request, 'accounts/coordinator_dashboard.html', context)
 @login_required
 def evaluate_r1_batch_coordinator(request):
     members = TeamMember.objects.all().order_by('team__created_at','reg_number')
