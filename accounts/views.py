@@ -314,22 +314,19 @@ def coordinator_dashboard(request):
                     defaults={'title': title, 'deadline': date_val, 'is_active': True, 'review_date': None}
                 )
 
-            # Safely send notification email without risking worker timeouts
-            try:
-                # Gather active user email list
-                recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
-                if recipient_emails:
-                    send_mail(
-                        subject=f"EVALX Schedule Updated: {slot.title}",
-                        message=f"The schedule/deadline for {slot.title} has been updated.",
-                        from_email=settings.DEFAULT_FROM_EMAIL,
-                        recipient_list=recipient_emails,
-                        fail_silently=False,
-                    )
-                messages.success(request, f"Schedule for {slot_type} updated and notifications dispatched!")
-            except Exception as e:
-                print(f"Set Deadline Email Timeout/Error: {e}")
-                messages.warning(request, f"Schedule for {slot_type} saved, but email notification timed out.")
+            # --- UPDATED TO USE BREVO API ---
+            recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
+            if recipient_emails:
+                subject = f"EVALX Schedule Updated: {slot.title}"
+                html_content = f"<p>The schedule/deadline for <strong>{slot.title}</strong> has been updated.</p>"
+                
+                email_sent = send_brevo_email(subject, html_content, recipient_emails)
+                if email_sent:
+                    messages.success(request, f"Schedule for {slot_type} updated and notifications dispatched!")
+                else:
+                    messages.warning(request, f"Schedule for {slot_type} saved, but email notification failed.")
+            else:
+                messages.success(request, f"Schedule for {slot_type} updated.")
 
             return redirect('coordinator_dashboard')
         
@@ -340,32 +337,21 @@ def coordinator_dashboard(request):
                 slot_title = slot.title
                 slot.delete()
                 
-                # Safely send deletion email without risking worker timeouts
-                try:
-                    recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
-                    if recipient_emails:
-                        send_mail(
-                            subject=f"EVALX Schedule Removed: {slot_title}",
-                            message=f"The schedule for {slot_title} has been removed by the Coordinator.",
-                            from_email=settings.DEFAULT_FROM_EMAIL,
-                            recipient_list=recipient_emails,
-                            fail_silently=False,
-                        )
-                    messages.success(request, "Deadline removed and notification dispatched.")
-                except Exception as e:
-                    print(f"Delete Deadline Email Timeout/Error: {e}")
-                    messages.warning(request, "Deadline removed from database, but notification email failed to send.")
+                # --- UPDATED TO USE BREVO API ---
+                recipient_emails = list(User.objects.exclude(email='').values_list('email', flat=True))
+                if recipient_emails:
+                    subject = f"EVALX Schedule Removed: {slot_title}"
+                    html_content = f"<p>The schedule for <strong>{slot_title}</strong> has been removed by the Coordinator.</p>"
+                    
+                    email_sent = send_brevo_email(subject, html_content, recipient_emails)
+                    if email_sent:
+                        messages.success(request, "Deadline removed and notification dispatched.")
+                    else:
+                        messages.warning(request, "Deadline removed from database, but notification email failed.")
+                else:
+                    messages.warning(request, "Deadline removed from database.")
 
             return redirect('coordinator_dashboard')
-
-    context = {
-        'teams': teams,
-        'slots_dict': slots_dict,
-        'team_submissions_map': dict(team_submissions_map),
-        'now': timezone.now(),
-        'members': TeamMember.objects.all().order_by('reg_number'),
-    }
-    return render(request, 'accounts/coordinator_dashboard.html', context)
 
 @login_required
 def evaluate_r1_batch_coordinator(request):
