@@ -16,7 +16,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security and Production Settings
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-74wl=m*yj)_g=n8(-f97kr%)pvf7xz)&%f^j=(t0x!!8bjcfpq')
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
-
 ALLOWED_HOSTS = ['*']
 
 # Application definition
@@ -27,7 +26,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
+    'django.contrib.staticfiles', 
     'accounts',
 ]
 
