@@ -365,7 +365,7 @@ def coordinator_dashboard(request):
                 subject = f"Schedule Updated: {slot.title}"
                 html_content = f"""
                     <p>Important Update for {slot.title}:</p>
-                    <p>{date_label} has been set for: {formatted_date}</p>
+                    <p>{date_label} set for: {formatted_date}</p>
                     <p>Please check your dashboard for details.</p>
                 """
                 
