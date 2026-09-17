@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 from .models import Team, DocumentSlot
 from datetime import datetime
@@ -40,20 +40,6 @@ def send_brevo_email(subject, html_content, recipient_emails):
         return False
 
 
-# @receiver(post_save, sender=Team)
-# def notify_team_on_registration(sender, instance, created, **kwargs):
-#     if created:
-#         subject = 'Welcome to EVALX - Registration Successful'
-#         html_content = f'<p>Hello,</p><p>Your team has been successfully registered.<br>Team ID: {instance.team_id}</p><p>You can now log in to the portal.</p>'
-#         recipient_list = [instance.user.email] if hasattr(instance, 'user') and instance.user else []
-#         
-#         if recipient_list:
-#             if send_brevo_email(subject, html_content, recipient_list):
-#                 print(f"✅ Success: Email sent to {recipient_list}")
-#             else:
-#                 print(f"❌ Email Error for Team {instance.team_id}")
-
-
 @receiver(post_save, sender=Team)
 def notify_title_approval(sender, instance, created, **kwargs):
     if not created and instance.is_approved:
@@ -63,70 +49,57 @@ def notify_title_approval(sender, instance, created, **kwargs):
             f"<p>Your project title <strong>'{instance.project_title}'</strong> has been officially APPROVED.</p>"
             f"<p>You can now proceed with your documentation.</p>"
         )
-        # Safely extract emails directly from members
-        recipient_list = [m.email for m in instance.members.all() if getattr(m, 'email', None)]
         
+        recipient_list = []
+
+        # 1. Check primary team user email
+        if getattr(instance, 'user', None) and getattr(instance.user, 'email', None):
+            recipient_list.append(instance.user.email)
+
+        # 2. Check team member emails (handles both m.user.email and m.email)
+        for member in instance.members.all():
+            if hasattr(member, 'user') and getattr(member.user, 'email', None):
+                recipient_list.append(member.user.email)
+            elif getattr(member, 'email', None):
+                recipient_list.append(member.email)
+
+        # Remove duplicate emails and empty values
+        recipient_list = list(set(filter(None, recipient_list)))
+
         if recipient_list:
             if send_brevo_email(subject, html_content, recipient_list):
-                print(f"✅ Approval Email sent to Team {instance.team_id}")
+                print(f"✅ Approval Email sent to Team {instance.team_id}: {recipient_list}")
             else:
                 print(f"❌ Approval Email failed for Team {instance.team_id}")
-
+        else:
+            print(f"⚠️ No valid email addresses found for Team {instance.team_id}")
 
 @receiver(post_save, sender=DocumentSlot)
-def notify_deadline_or_review(sender, instance, created, **kwargs):
-    # This fires when a Coordinator updates a slot's deadline or review date
-    subject = f"Schedule Updated: {instance.title}"
+def notify_review(sender, instance, created, **kwargs):
+    """Fires ONLY when a Review Date is set or updated for a presentation/review slot."""
+    # Check if a review date exists for this slot
+    if not instance.review_date:
+        return
+
+    subject = f"Review Schedule Updated: {instance.title}"
     
-    # Helper to handle the 'str' vs 'date' object issue
-    def get_date_str(date_val):
-        if not date_val:
-            return None
-        if isinstance(date_val, str):
-            try:
-                return datetime.strptime(date_val, '%Y-%m-%d').strftime('%d %B, %Y')
-            except:
-                return date_val
-        return date_val.strftime('%d %B, %Y')
+    # Format review date string cleanly
+    clean_val = str(instance.review_date).split('T')[0]
+    try:
+        r_str = datetime.strptime(clean_val, '%Y-%m-%d').strftime('%d %B, %Y')
+    except ValueError:
+        r_str = clean_val
 
-    d_str = get_date_str(instance.deadline)
-    r_str = get_date_str(instance.review_date)
-
-    # Logic to customize message based on what was updated
-    if r_str and d_str:
-        body = f"Review Date: {r_str}<br>Submission Deadline: {d_str}"
-    elif r_str:
-        body = f"Review Date has been set for: {r_str}"
-    else:
-        body = f"Submission Deadline set for: {d_str}"
-
-    html_content = f"<p>Important Update for {instance.title}:</p><p>{body}</p><p>Please check your dashboard for details.</p>"
-    
-    # Send to ALL active teams safely
-    recipient_list = list(Team.objects.exclude(user__email='').values_list('user__email', flat=True))
-    
-    if recipient_list:
-        if send_brevo_email(subject, html_content, recipient_list):
-            print(f"✅ Bulk Notification sent for {instance.title}")
-        else:
-            print(f"❌ Email failed for {instance.title}")
-
-
-@receiver(post_delete, sender=DocumentSlot)
-def notify_on_deadline_deletion(sender, instance, **kwargs):
-    """Fires an email to all teams when a coordinator removes a deadline or review date."""
-    subject = f"Schedule Removed: {instance.title}"
-    
     html_content = (
-        f"<p>Notice: The schedule for <strong>'{instance.title}'</strong> has been removed by the Coordinator.</p>"
-        f"<p>Please check your dashboard for further updates or contact your guide for more information.</p>"
+        f"<p>Important Update for {instance.title}:</p>"
+        f"<p>Review Date has been set for: <strong>{r_str}</strong></p>"
+        f"<p>Please check your dashboard for details.</p>"
     )
     
-    # Send to all registered teams safely
     recipient_list = list(Team.objects.exclude(user__email='').values_list('user__email', flat=True))
     
     if recipient_list:
         if send_brevo_email(subject, html_content, recipient_list):
-            print(f"⚠️ Deletion Notification sent for {instance.title}")
+            print(f"✅ Review Date Notification sent for {instance.title}")
         else:
-            print(f"❌ Deletion Email Error for {instance.title}")
+            print(f"❌ Review Date Email failed for {instance.title}")
